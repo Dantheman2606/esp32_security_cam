@@ -1,86 +1,92 @@
 // Viral Science www.viralsciencecreativity.com www.youtube.com/c/viralscience
 // ESP32 Cam Motion Alert | Send Image to Telegram
-
-// Enter your WiFi ssid and password
-const char* ssid     = "Matt";   //WIFI SSID
-const char* password = "20102606";   //WIFI password
-String token = "7063027583:AAF_xSjZZ6XHhSmU-xx12VmQdJf-sK_OpCk";
-String chat_id = "5347710820";
-
+#include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 #include "esp_camera.h"
+#include <UniversalTelegramBot.h>
+#include <ArduinoJson.h>
+// Enter your WiFi ssid and password
+const char* ssid = "Matt";          //WIFI SSID
+const char* password = "20102606";  //WIFI password
+String token = "7063027583:AAF_xSjZZ6XHhSmU-xx12VmQdJf-sK_OpCk";
+String chat_id = "5347710820";
+
 
 //CAMERA_MODEL_AI_THINKER
-#define PWDN_GPIO_NUM     32
-#define RESET_GPIO_NUM    -1
-#define XCLK_GPIO_NUM      0
-#define SIOD_GPIO_NUM     26
-#define SIOC_GPIO_NUM     27
-#define Y9_GPIO_NUM       35
-#define Y8_GPIO_NUM       34
-#define Y7_GPIO_NUM       39
-#define Y6_GPIO_NUM       36
-#define Y5_GPIO_NUM       21
-#define Y4_GPIO_NUM       19
-#define Y3_GPIO_NUM       18
-#define Y2_GPIO_NUM        5
-#define VSYNC_GPIO_NUM    25
-#define HREF_GPIO_NUM     23
-#define PCLK_GPIO_NUM     22
+#define PWDN_GPIO_NUM 32
+#define RESET_GPIO_NUM -1
+#define XCLK_GPIO_NUM 0
+#define SIOD_GPIO_NUM 26
+#define SIOC_GPIO_NUM 27
+#define Y9_GPIO_NUM 35
+#define Y8_GPIO_NUM 34
+#define Y7_GPIO_NUM 39
+#define Y6_GPIO_NUM 36
+#define Y5_GPIO_NUM 21
+#define Y4_GPIO_NUM 19
+#define Y3_GPIO_NUM 18
+#define Y2_GPIO_NUM 5
+#define VSYNC_GPIO_NUM 25
+#define HREF_GPIO_NUM 23
+#define PCLK_GPIO_NUM 22
 
-int gpioPIR = 13;   //PIR Motion Sensor
+WiFiClientSecure client_tcp;
+int gpioPIR = 13;  //PIR Motion Sensor
 
-void setup()
-{
+void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
-  
+
   Serial.begin(115200);
   delay(10);
   WiFi.mode(WIFI_STA);
   Serial.println("");
   Serial.print("Connecting to ");
   Serial.println(ssid);
-  WiFi.begin(ssid, password);  
-  long int StartTime=millis();
-  while (WiFi.status() != WL_CONNECTED) 
-  {
+  WiFi.begin(ssid, password);
+  long int StartTime = millis();
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    if ((StartTime+10000) < millis()) break;
-  } 
+    if ((StartTime + 10000) < millis()) break;
+  }
 
   Serial.println("");
   Serial.println("STAIP address: ");
   Serial.println(WiFi.localIP());
   Serial.println("");
+  // Printing connection status
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Connected to: ");
+    Serial.println(ssid);
+  }
+
+  client_tcp.setCACert(TELEGRAM_CERTIFICATE_ROOT);
+
+
+
+
 
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Reset");
-    
+
     ledcAttachPin(4, 3);
     ledcSetup(3, 5000, 8);
-    ledcWrite(3,10);
+    ledcWrite(3, 10);
     delay(200);
-    ledcWrite(3,0);
-    delay(200);    
+    ledcWrite(3, 0);
+    delay(200);
     ledcDetachPin(3);
     delay(1000);
     ESP.restart();
+  } else {
+    Serial.println("LEDC start");
   }
-  else 
-  {
-    ledcAttachPin(4, 3);
-    ledcSetup(3, 5000, 8);
-    for (int i=0;i<5;i++) {
-      ledcWrite(3,10);
-      delay(200);
-      ledcWrite(3,0);
-      delay(200);    
-    }
-    ledcDetachPin(3);      
-  }
+  //making change here from pin 3 to pin 4
+  //ledcDetachPin(3);
+  ledcDetachPin(4);
+
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -104,137 +110,117 @@ void setup()
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
 
-  if(psramFound())
-{
+  if (psramFound()) {
     config.frame_size = FRAMESIZE_VGA;
     config.jpeg_quality = 10;  //0-63 lower number means higher quality
     config.fb_count = 2;
-  } 
-else 
-{
+  } else {
     config.frame_size = FRAMESIZE_QQVGA;
     config.jpeg_quality = 12;  //0-63 lower number means higher quality
     config.fb_count = 1;
   }
-  
+
   // camera init
   esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK) 
-{
+  if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
     delay(1000);
     ESP.restart();
   }
 
-sensor_t * s = esp_camera_sensor_get();
- s->set_framesize(s, FRAMESIZE_XGA);  
-
+  sensor_t* s = esp_camera_sensor_get();
+  s->set_framesize(s, FRAMESIZE_XGA);
 }
 
-void loop()
-{
- 
+void loop() {
+
   pinMode(gpioPIR, INPUT_PULLUP);
   int v = digitalRead(gpioPIR);
   Serial.println(v);
-  if (v==1)
-  {
+  if (v == 1) {
     alerts2Telegram(token, chat_id);
-    delay(10000); 
+    delay(10000);
   }
-  delay(1000);  
-  
+  delay(1000);
 }
 
-String alerts2Telegram(String token, String chat_id) 
-{
-  const char* myDomain = "api.telegram.org";
-  String getAll="", getBody = "";
+String alerts2Telegram(String token, String chat_id) {
+  const char* myDomain = "https://api.telegram.org";
+  String getAll = "", getBody = "";
 
-  camera_fb_t * fb = NULL;
-  fb = esp_camera_fb_get();  
-  if(!fb) 
-{
+  camera_fb_t* fb = NULL;
+  fb = esp_camera_fb_get();
+  if (!fb) {
     Serial.println("Camera capture failed");
     delay(1000);
     ESP.restart();
     return "Camera capture failed";
-  }  
-  
+  }
 
-WiFiClientSecure client_tcp;
-  
-  if (client_tcp.connect(myDomain, 443)) 
-{
+
+
+
+  if (client_tcp.connect(myDomain, 443)) {
     Serial.println("Connected to " + String(myDomain));
-    
+
     String head = "--India\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + chat_id + "\r\n--India\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
     String tail = "\r\n--India--\r\n";
 
     uint16_t imageLen = fb->len;
     uint16_t extraLen = head.length() + tail.length();
     uint16_t totalLen = imageLen + extraLen;
-  
-    client_tcp.println("POST /bot"+token+"/sendPhoto HTTP/1.1");
+
+    client_tcp.println("POST /bot" + token + "/sendPhoto HTTP/1.1");
     client_tcp.println("Host: " + String(myDomain));
     client_tcp.println("Content-Length: " + String(totalLen));
     client_tcp.println("Content-Type: multipart/form-data; boundary=India");
     client_tcp.println();
     client_tcp.print(head);
-  
-    uint8_t *fbBuf = fb->buf;
+
+    uint8_t* fbBuf = fb->buf;
     size_t fbLen = fb->len;
 
 
-    for (size_t n=0;n<fbLen;n=n+1024)
- {
+    for (size_t n = 0; n < fbLen; n = n + 1024) {
 
-      if (n+1024<fbLen) 
-{
+      if (n + 1024 < fbLen) {
         client_tcp.write(fbBuf, 1024);
         fbBuf += 1024;
-      }
-      else if (fbLen%1024>0) 
-{
-        size_t remainder = fbLen%1024;
+      } else if (fbLen % 1024 > 0) {
+        size_t remainder = fbLen % 1024;
         client_tcp.write(fbBuf, remainder);
       }
-    }  
-    
+    }
+
     client_tcp.print(tail);
-    
+
     esp_camera_fb_return(fb);
-    
-    int waitTime = 10000;   // timeout 10 seconds
+
+    int waitTime = 10000;  // timeout 10 seconds
     long startTime = millis();
     boolean state = false;
-    
-    while ((startTime + waitTime) > millis())
-    {
+
+    while ((startTime + waitTime) > millis()) {
       Serial.print(".");
-      delay(100);      
-      while (client_tcp.available()) 
-      {
-          char c = client_tcp.read();
-          if (c == '\n') 
-          {
-            if (getAll.length()==0) state=true; 
-            getAll = "";
-          } 
-          else if (c != '\r')
-            getAll += String(c);
-          if (state==true) getBody += String(c);
-          startTime = millis();
-       }
-       if (getBody.length()>0) break;
+      delay(100);
+      while (client_tcp.available()) {
+        char c = client_tcp.read();
+        if (c == '\n') {
+          if (getAll.length() == 0) state = true;
+          getAll = "";
+        } else if (c != '\r')
+          getAll += String(c);
+        if (state == true) getBody += String(c);
+        startTime = millis();
+      }
+      if (getBody.length() > 0) break;
     }
     client_tcp.stop();
     Serial.println(getBody);
-  }
-  else {
+  } else {
     getBody = "Connection to telegram failed.";
     Serial.println("Connection to telegram failed.");
   }
-  
+
   return getBody;
 }
