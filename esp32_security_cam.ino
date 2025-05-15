@@ -1,4 +1,3 @@
-// Viral Science www.viralsciencecreativity.com www.youtube.com/c/viralscience
 // ESP32 Cam Motion Alert | Send Image to Telegram
 #include <Arduino.h>
 #include <WiFi.h>
@@ -8,11 +7,11 @@
 #include "esp_camera.h"
 #include <UniversalTelegramBot.h>
 #include <ArduinoJson.h>
-// Enter your WiFi ssid and password
+
 const char* ssid = "Matt";          //WIFI SSID
 const char* password = "20102606";  //WIFI password
-String token = "7063027583:AAF_xSjZZ6XHhSmU-xx12VmQdJf-sK_OpCk";
-String chat_id = "5347710820";
+String token = "<ADD-YOUR-TOKEN-HERE>";
+String chat_id = "<ADD-CHAT-ID-HERE>";
 
 
 //CAMERA_MODEL_AI_THINKER
